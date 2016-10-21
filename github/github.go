@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -44,6 +45,7 @@ type BuiltTemplate struct {
 
 type folder struct {
 	Name string `json:"name"`
+	Url  string `json:"url"`
 }
 
 type tmplArguments struct {
@@ -192,7 +194,12 @@ func (t *GenericTemplate) SubBuildInfo(p *types.Plugin, tag string) (*BuiltTempl
 	return &final, nil
 }
 
-func getTemplateNum(client *http.Client, url string, token string) (int, error) {
+//get template returns the next catalog number for a branch
+// IF the catalog already exists: i.e build restarted
+//	return -1 and and error of nil
+// If there is an error
+//  return -1 and the error
+func getTemplateNum(client *http.Client, url string, token string, tag string) (int, error) {
 	folderBytes, code, err := getBytesFromURL(client, url, token)
 	if err != nil {
 		return -1, err
@@ -209,6 +216,28 @@ func getTemplateNum(client *http.Client, url string, token string) (int, error) 
 
 	for _, folder := range folders {
 		if number, err := strconv.Atoi(folder.Name); err == nil {
+
+			data, _, err := getBytesFromURL(client, folder.Url, token)
+			if err != nil {
+				return -1, err
+			}
+
+			//check if catalog is already built
+			var files []templateFile
+			json.Unmarshal(data, &files)
+			for _, file := range files {
+				if file.Name == "docker-compose.yml" {
+					yamlData, _, err := getBytesFromURL(client, file.DownloadURL, token)
+					if err != nil {
+						return -1, err
+					}
+					if strings.Contains(string(yamlData), tag) {
+						return -1, nil
+					}
+					break
+				}
+			}
+
 			if number > currentTemplate {
 				currentTemplate = number
 			}
@@ -243,23 +272,27 @@ func (t *BuiltTemplate) Commit(accessToken string, owner string, repo string, bu
 	client := &http.Client{
 		Timeout: time.Second * 60,
 	}
-	number, err := getTemplateNum(client, fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/templates/%s", owner, repo, t.branch), accessToken)
+	number, err := getTemplateNum(client, fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/templates/%s", owner, repo, t.branch), accessToken, t.tag)
 	if err != nil {
 		return nil, err
 	}
-	if number == 0 { //new branch
-		if err = commitFile(githubClient, owner, repo, fmt.Sprintf("templates/%s/catalogIcon.png", t.branch), t.Icon, fmt.Sprintf("Drone Build #%d: Adding Icon", buildNum)); err != nil {
+	if number != -1 { //check to make sure catalog is not already there: build resart
+		if number == 0 { //on a new branch push the template
+			if err = commitFile(githubClient, owner, repo, fmt.Sprintf("templates/%s/catalogIcon.png", t.branch), t.Icon, fmt.Sprintf("Drone Build #%d: Adding Icon", buildNum)); err != nil {
+				return nil, err
+			}
+			if err = commitFile(githubClient, owner, repo, fmt.Sprintf("templates/%s/config.yml", t.branch), []byte(t.Config), fmt.Sprintf("Drone Build #%d: Adding config.yml", buildNum)); err != nil {
+				return nil, err
+			}
+		}
+		if err = commitFile(githubClient, owner, repo, fmt.Sprintf("templates/%s/%d/docker-compose.yml", t.branch, number), []byte(t.DockerCompose), fmt.Sprintf("Drone Build #%d: Changing docker-compose.yml", buildNum)); err != nil {
 			return nil, err
 		}
-		if err = commitFile(githubClient, owner, repo, fmt.Sprintf("templates/%s/config.yml", t.branch), []byte(t.Config), fmt.Sprintf("Drone Build #%d: Adding config.yml", buildNum)); err != nil {
+		if err = commitFile(githubClient, owner, repo, fmt.Sprintf("templates/%s/%d/rancher-compose.yml", t.branch, number), []byte(t.RancherCompose), fmt.Sprintf("Drone Build #%d: Changing rancher-compose.yml", buildNum)); err != nil {
 			return nil, err
 		}
-	}
-	if err = commitFile(githubClient, owner, repo, fmt.Sprintf("templates/%s/%d/docker-compose.yml", t.branch, number), []byte(t.DockerCompose), fmt.Sprintf("Drone Build #%d: Changing docker-compose.yml", buildNum)); err != nil {
-		return nil, err
-	}
-	if err = commitFile(githubClient, owner, repo, fmt.Sprintf("templates/%s/%d/rancher-compose.yml", t.branch, number), []byte(t.RancherCompose), fmt.Sprintf("Drone Build #%d: Changing rancher-compose.yml", buildNum)); err != nil {
-		return nil, err
+	} else {
+		fmt.Printf("Catalog found for Tag: %s, No catalog will be built.\n", t.tag)
 	}
 	var info CatalogInfo
 	info.CatalogRepo = fmt.Sprintf("%s/%s", owner, repo)

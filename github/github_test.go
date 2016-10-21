@@ -48,15 +48,64 @@ func TestHookImage(t *testing.T) {
 					MatchHeader("Authorization", b64.URLEncoding.EncodeToString([]byte("token:x-oauth-basic"))).
 					Reply(200).
 					JSON([]map[string]string{
-					map[string]string{"name": "0"},
-					map[string]string{"name": "1"},
-					map[string]string{"name": "2"},
-					map[string]string{"name": "SomeOtherFile"},
+					map[string]string{"name": "0", "url": "http://templates.com/template"},
+					map[string]string{"name": "1", "url": "http://templates.com/template"},
+					map[string]string{"name": "2", "url": "http://templates.com/template"},
+					map[string]string{"name": "SomeOtherFile", "url": "http://templates.com/nonsense"},
 				})
+
+				gock.New("http://templates.com").
+					Get("/template").
+					MatchHeader("Authorization", b64.URLEncoding.EncodeToString([]byte("token:x-oauth-basic"))).Times(3).
+					Reply(200).
+					JSON([]map[string]string{
+					map[string]string{"name": "docker-compose.yml", "download_url": "http://download.com/data"},
+					map[string]string{"name": "blah", "download_url": "http://download.com/nope"},
+					map[string]string{"name": "nonsense", "download_url": "http://download.com/nope"},
+				})
+
+				gock.New("http://download.com/").
+					Get("/data").
+					Times(3).
+					MatchHeader("Authorization", b64.URLEncoding.EncodeToString([]byte("token:x-oauth-basic"))).
+					Reply(200).BodyString("Not The Correct Tag")
+
 				client := &http.Client{}
-				number, err := getTemplateNum(client, "http://example.com/test", "token")
+				number, err := getTemplateNum(client, "http://example.com/test", "token", "mytag")
 				g.Assert(err).Equal(nil)
 				g.Assert(number).Equal(3)
+			})
+
+			g.It("should find The existing catalog", func() {
+				defer gock.Off()
+				gock.New("http://example.com").
+					Get("/test").
+					MatchHeader("Authorization", b64.URLEncoding.EncodeToString([]byte("token:x-oauth-basic"))).
+					Reply(200).
+					JSON([]map[string]string{
+					map[string]string{"name": "0", "url": "http://templates.com/template"},
+					map[string]string{"name": "SomeOtherFile", "url": "http://templates.com/nonsense"},
+				})
+
+				gock.New("http://templates.com").
+					Get("/template").
+					MatchHeader("Authorization", b64.URLEncoding.EncodeToString([]byte("token:x-oauth-basic"))).
+					Reply(200).
+					JSON([]map[string]string{
+					map[string]string{"name": "docker-compose.yml", "download_url": "http://download.com/data"},
+					map[string]string{"name": "blah", "download_url": "http://download.com/nope"},
+					map[string]string{"name": "nonsense", "download_url": "http://download.com/nope"},
+				})
+
+				gock.New("http://download.com/").
+					Get("/data").
+					MatchHeader("Authorization", b64.URLEncoding.EncodeToString([]byte("token:x-oauth-basic"))).
+					Reply(200).BodyString("This is the correct tag: mytag")
+
+				client := &http.Client{}
+				number, err := getTemplateNum(client, "http://example.com/test", "token", "mytag")
+				g.Assert(err).Equal(nil)
+				g.Assert(number).Equal(-1)
 			})
 
 			g.It("should get 0 if there is no directory", func() {
@@ -66,7 +115,7 @@ func TestHookImage(t *testing.T) {
 					MatchHeader("Authorization", b64.URLEncoding.EncodeToString([]byte("token:x-oauth-basic"))).
 					Reply(401).JSON([]map[string]string{})
 				client := &http.Client{}
-				number, err := getTemplateNum(client, "http://example.com/test", "token")
+				number, err := getTemplateNum(client, "http://example.com/test", "token", "mytag")
 				g.Assert(err).Equal(nil)
 				g.Assert(number).Equal(0)
 			})
