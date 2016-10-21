@@ -291,8 +291,6 @@ func (t *BuiltTemplate) Commit(accessToken string, owner string, repo string, bu
 		if err = commitFile(githubClient, owner, repo, fmt.Sprintf("templates/%s/%d/rancher-compose.yml", t.branch, number), []byte(t.RancherCompose), fmt.Sprintf("Drone Build #%d: Changing rancher-compose.yml", buildNum)); err != nil {
 			return nil, err
 		}
-	} else {
-		fmt.Printf("Catalog found for Tag: %s, No catalog will be built.\n", t.tag)
 	}
 	var info CatalogInfo
 	info.CatalogRepo = fmt.Sprintf("%s/%s", owner, repo)
