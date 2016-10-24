@@ -223,6 +223,7 @@ func getTemplateNum(client *http.Client, url string, token string, tag string) (
 			}
 
 			//check if catalog is already built
+			//This solves and issue where duplicate catalogs from being built from a restarted build.
 			var files []templateFile
 			json.Unmarshal(data, &files)
 			for _, file := range files {
@@ -247,7 +248,13 @@ func getTemplateNum(client *http.Client, url string, token string, tag string) (
 
 }
 
-func commitFile(githubClient *github.Client, owner string, repo string, path string, contents []byte, message string) error {
+func commitFile(accessToken string, owner string, repo string, path string, contents []byte, message string) error {
+
+	token := oauth2.Token{AccessToken: accessToken}
+	tokenSource := oauth2.StaticTokenSource(&token)
+	oauthClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
+	githubClient := github.NewClient(oauthClient)
+
 	branch := "master"
 	opts := github.RepositoryContentFileOptions{
 		Message: &message,
@@ -264,11 +271,6 @@ func commitFile(githubClient *github.Client, owner string, repo string, path str
 //Commit commits the file to github
 func (t *BuiltTemplate) Commit(accessToken string, owner string, repo string, buildNum int) (*CatalogInfo, error) {
 
-	token := oauth2.Token{AccessToken: accessToken}
-	tokenSource := oauth2.StaticTokenSource(&token)
-	oauthClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
-	githubClient := github.NewClient(oauthClient)
-
 	client := &http.Client{
 		Timeout: time.Second * 60,
 	}
@@ -278,17 +280,17 @@ func (t *BuiltTemplate) Commit(accessToken string, owner string, repo string, bu
 	}
 	if number != -1 { //check to make sure catalog is not already there: build resart
 		if number == 0 { //on a new branch push the template
-			if err = commitFile(githubClient, owner, repo, fmt.Sprintf("templates/%s/catalogIcon.png", t.branch), t.Icon, fmt.Sprintf("Drone Build #%d: Adding Icon", buildNum)); err != nil {
+			if err = commitFile(accessToken, owner, repo, fmt.Sprintf("templates/%s/catalogIcon.png", t.branch), t.Icon, fmt.Sprintf("Drone Build #%d: Adding Icon", buildNum)); err != nil {
 				return nil, err
 			}
-			if err = commitFile(githubClient, owner, repo, fmt.Sprintf("templates/%s/config.yml", t.branch), []byte(t.Config), fmt.Sprintf("Drone Build #%d: Adding config.yml", buildNum)); err != nil {
+			if err = commitFile(accessToken, owner, repo, fmt.Sprintf("templates/%s/config.yml", t.branch), []byte(t.Config), fmt.Sprintf("Drone Build #%d: Adding config.yml", buildNum)); err != nil {
 				return nil, err
 			}
 		}
-		if err = commitFile(githubClient, owner, repo, fmt.Sprintf("templates/%s/%d/docker-compose.yml", t.branch, number), []byte(t.DockerCompose), fmt.Sprintf("Drone Build #%d: Changing docker-compose.yml", buildNum)); err != nil {
+		if err = commitFile(accessToken, owner, repo, fmt.Sprintf("templates/%s/%d/docker-compose.yml", t.branch, number), []byte(t.DockerCompose), fmt.Sprintf("Drone Build #%d: Changing docker-compose.yml", buildNum)); err != nil {
 			return nil, err
 		}
-		if err = commitFile(githubClient, owner, repo, fmt.Sprintf("templates/%s/%d/rancher-compose.yml", t.branch, number), []byte(t.RancherCompose), fmt.Sprintf("Drone Build #%d: Changing rancher-compose.yml", buildNum)); err != nil {
+		if err = commitFile(accessToken, owner, repo, fmt.Sprintf("templates/%s/%d/rancher-compose.yml", t.branch, number), []byte(t.RancherCompose), fmt.Sprintf("Drone Build #%d: Changing rancher-compose.yml", buildNum)); err != nil {
 			return nil, err
 		}
 	}
