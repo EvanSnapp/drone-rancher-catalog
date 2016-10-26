@@ -100,16 +100,7 @@ func exec(p types.Plugin) error {
 			if err2 != nil {
 				return err2
 			}
-			if info.Version == -1 {
-				fmt.Printf("There was a catalog already built for %s\n", tag)
-				fmt.Println("Since the tag was overriden the catalog upgrade feature will not be able to upgrade stacks to the image just pushed.")
-				fmt.Println("The most likely cause of this is restarting a build: if that is the case don't worry the image should be the same as what was originally pushed and no upgrade is needed.")
-				fmt.Println("If you need to upgrade a stack, there are two options, either:")
-				fmt.Println("	A) Start a new build to generate a new tag, and cowpoke can do the upgrades-- Note restarting this build will not generate a new tag")
-				fmt.Println("	B) Delete and recreate the stack in rancher. Then rancher will pull the correct image from docker hub")
-			} else {
-				buildCatalogs = append(buildCatalogs, *info)
-			}
+			buildCatalogs = append(buildCatalogs, *info)
 		}
 	}
 	//output catalog entry info to temp file for downstream deployment plugin

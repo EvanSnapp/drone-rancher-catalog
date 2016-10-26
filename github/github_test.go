@@ -71,8 +71,9 @@ func TestHookImage(t *testing.T) {
 					Reply(200).BodyString("Not The Correct Tag")
 
 				client := &http.Client{}
-				number, err := getTemplateNum(client, "http://example.com/test", "token", "mytag")
+				new, number, err := getTemplateNum(client, "http://example.com/test", "token", "mytag")
 				g.Assert(err).Equal(nil)
+				g.Assert(new).Equal(true)
 				g.Assert(number).Equal(3)
 			})
 
@@ -103,9 +104,10 @@ func TestHookImage(t *testing.T) {
 					Reply(200).BodyString("This is the correct tag: mytag")
 
 				client := &http.Client{}
-				number, err := getTemplateNum(client, "http://example.com/test", "token", "mytag")
+				new, number, err := getTemplateNum(client, "http://example.com/test", "token", "mytag")
 				g.Assert(err).Equal(nil)
-				g.Assert(number).Equal(-1)
+				g.Assert(new).Equal(false)
+				g.Assert(number).Equal(0)
 			})
 
 			g.It("should get 0 if there is no directory", func() {
@@ -115,9 +117,10 @@ func TestHookImage(t *testing.T) {
 					MatchHeader("Authorization", b64.URLEncoding.EncodeToString([]byte("token:x-oauth-basic"))).
 					Reply(401).JSON([]map[string]string{})
 				client := &http.Client{}
-				number, err := getTemplateNum(client, "http://example.com/test", "token", "mytag")
+				new, number, err := getTemplateNum(client, "http://example.com/test", "token", "mytag")
 				g.Assert(err).Equal(nil)
 				g.Assert(number).Equal(0)
+				g.Assert(new).Equal(true)
 			})
 
 		})

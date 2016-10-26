@@ -199,19 +199,19 @@ func (t *GenericTemplate) SubBuildInfo(p *types.Plugin, tag string) (*BuiltTempl
 //	return -1 and and error of nil
 // If there is an error
 //  return -1 and the error
-func getTemplateNum(client *http.Client, url string, token string, tag string) (int, error) {
+func getTemplateNum(client *http.Client, url string, token string, tag string) (bool, int, error) {
 	folderBytes, code, err := getBytesFromURL(client, url, token)
 	if err != nil {
-		return -1, err
+		return false, -1, err
 	}
 	if code == 404 {
-		return 0, nil
+		return true, 0, nil
 	}
 	var folders []folder
 	currentTemplate := -1 //empty folder
 	err = json.Unmarshal(folderBytes, &folders)
 	if err != nil {
-		return -1, err
+		return false, -1, err
 	}
 
 	for _, folder := range folders {
@@ -219,7 +219,7 @@ func getTemplateNum(client *http.Client, url string, token string, tag string) (
 
 			data, _, err := getBytesFromURL(client, folder.Url, token)
 			if err != nil {
-				return -1, err
+				return false, -1, err
 			}
 
 			//check if catalog is already built
@@ -230,10 +230,10 @@ func getTemplateNum(client *http.Client, url string, token string, tag string) (
 				if file.Name == "docker-compose.yml" {
 					yamlData, _, err := getBytesFromURL(client, file.DownloadURL, token)
 					if err != nil {
-						return -1, err
+						return false, -1, err
 					}
 					if strings.Contains(string(yamlData), tag) {
-						return -1, nil
+						return false, number, nil
 					}
 					break
 				}
@@ -244,12 +244,13 @@ func getTemplateNum(client *http.Client, url string, token string, tag string) (
 			}
 		}
 	}
-	return currentTemplate + 1, nil
+	return true, currentTemplate + 1, nil
 
 }
 
 func commitFile(accessToken string, owner string, repo string, path string, contents []byte, message string) error {
 
+	//TODO: Change to allow the files to be changed in one commit to prevent half built catalogs :(
 	token := oauth2.Token{AccessToken: accessToken}
 	tokenSource := oauth2.StaticTokenSource(&token)
 	oauthClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
@@ -274,11 +275,11 @@ func (t *BuiltTemplate) Commit(accessToken string, owner string, repo string, bu
 	client := &http.Client{
 		Timeout: time.Second * 60,
 	}
-	number, err := getTemplateNum(client, fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/templates/%s", owner, repo, t.branch), accessToken, t.tag)
+	new, number, err := getTemplateNum(client, fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/templates/%s", owner, repo, t.branch), accessToken, t.tag)
 	if err != nil {
 		return nil, err
 	}
-	if number != -1 { //check to make sure catalog is not already there: build resart
+	if new { //check to make sure catalog is not already there: build resart
 		if number == 0 { //on a new branch push the template
 			if err = commitFile(accessToken, owner, repo, fmt.Sprintf("templates/%s/catalogIcon.png", t.branch), t.Icon, fmt.Sprintf("Drone Build #%d: Adding Icon", buildNum)); err != nil {
 				return nil, err
@@ -293,6 +294,13 @@ func (t *BuiltTemplate) Commit(accessToken string, owner string, repo string, bu
 		if err = commitFile(accessToken, owner, repo, fmt.Sprintf("templates/%s/%d/rancher-compose.yml", t.branch, number), []byte(t.RancherCompose), fmt.Sprintf("Drone Build #%d: Changing rancher-compose.yml", buildNum)); err != nil {
 			return nil, err
 		}
+	} else {
+		fmt.Printf("There was a catalog already built for %s\n", t.tag)
+		fmt.Println("Since the tag was overriden the catalog upgrade feature will not be able to upgrade stacks to the image just pushed.")
+		fmt.Println("The most likely cause of this is restarting a build: if that is the case don't worry the image should be the same as what was originally pushed and no upgrade is needed.")
+		fmt.Println("If you need to upgrade a stack, there are two options, either:")
+		fmt.Println("	A) Start a new build to generate a new tag, and cowpoke can do the upgrades-- Note restarting this build will not generate a new tag")
+		fmt.Println("	B) Delete and recreate the stack in rancher. Then rancher will pull the correct image from docker hub")
 	}
 	var info CatalogInfo
 	info.CatalogRepo = fmt.Sprintf("%s/%s", owner, repo)
