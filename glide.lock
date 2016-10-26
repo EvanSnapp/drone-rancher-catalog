@@ -1,8 +1,10 @@
-hash: 06b51131e0f7e1fad6d5beb7cc3b2c9b2676e402520104f1b843d1af61355015
-updated: 2016-10-19T16:09:38.231684888-05:00
+hash: 1eeb7330f1927769f37572fa673e8fe3ba99c58e5489fe614463ad9feb121e12
+updated: 2016-10-26T15:19:55.411188571-05:00
 imports:
 - name: github.com/asaskevich/govalidator
   version: 7b3beb6df3c42abd3509abfc3bcacc0fbfb7c877
+- name: github.com/blang/semver
+  version: 60ec3488bfea7cca02b021d106d9911120d25fe9
 - name: github.com/codegangsta/cli
   version: a14d7d367bc02b1f57d88de97926727f2d936387
 - name: github.com/drone/drone-go
@@ -49,5 +51,5 @@ imports:
   - internal/urlfetch
   - urlfetch
 - name: gopkg.in/yaml.v2
-  version: a5b47d31c556af34a302ce5d659e6fea44d90de0
+  version: a83829b6f1293c91addabc89d0571c246397bbf4
 testImports: []

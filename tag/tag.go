@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/LeanKit-Labs/drone-rancher-catalog/types"
+	"github.com/blang/semver"
 )
 
 //vars for reading semVer data
@@ -41,34 +42,22 @@ func replaceUnderscores(str string) string {
 //CreateDockerImageTags takes plugin information and returns a list
 //of tags to use when publishing the project image to Docker Hub
 //TODO: this function might not need to take an error
-func CreateDockerImageTags(p types.Plugin) ([]string, error) {
-	var projectMap = map[string]func() (string, error){
-		"node":        getJSONVersionReader(fmt.Sprintf("%s/package.json", p.Workspace)),
-		"dotnet-core": getJSONVersionReader(fmt.Sprintf("%s/project.json", p.Workspace)),
-	}
+func CreateDockerImageTags(p types.Plugin, versionString string) ([]string, error) {
 
-	//read version
-	version := ""
-	if getVersion, ok := projectMap[p.ProjectType]; ok {
-		if val, err := getVersion(); err == nil {
-			version = val
-		} else {
-			return []string{}, err
-		}
+	releaseVersion, err := semver.Make(versionString)
+	if err != nil {
+		return []string{}, err
 	}
 
 	//handle master tag
 	if p.Branch == "master" {
-		if version != "" { //default master format is v<smver> of the version is present or master_build_shaw if version is not found
-			return []string{fmt.Sprintf("v%s", version), "latest"}, nil
-		}
-		return []string{fmt.Sprintf("master_%d_%s", p.Build.Number, p.Build.Commit[:7]), "latest"}, nil
+		//unfortnatnly docker does not support '+' character to seperate build data
+		//This will use a dash to seperate the build metadata from the smver
+		return []string{fmt.Sprintf("v%s", releaseVersion.String()), fmt.Sprintf("v%s-drone.build.%d", releaseVersion.String(), p.Build.Number), "latest"}, nil
 	}
 
 	//return the long tag
-	//githubOwner_githubRepo_branch_semVer_globalProjectNum_shortCommitSHA
-	if version != "" {
-		return []string{fmt.Sprintf("%s_%s_%s_%s_%d_%s", replaceUnderscores(p.Repo.Owner), replaceUnderscores(p.Repo.Name), replaceUnderscores(p.Build.Branch), version, p.Build.Number, p.Build.Commit[:7])}, nil
-	}
-	return []string{fmt.Sprintf("%s_%s_%s_%d_%s", replaceUnderscores(p.Repo.Owner), replaceUnderscores(p.Repo.Name), replaceUnderscores(p.Build.Branch), p.Build.Number, p.Build.Commit[:7])}, nil
+	//githubOwner_githubRepo_branch_semVer_build_commit
+	return []string{fmt.Sprintf("%s_%s_%s_%s_%d_%s", replaceUnderscores(p.Repo.Owner), replaceUnderscores(p.Repo.Name), replaceUnderscores(p.Build.Branch), releaseVersion.String(), p.Build.Number, p.Build.Commit[:7])}, nil
+
 }

@@ -21,3 +21,5 @@ import:
   version: ^0.0.1
 - package: github.com/h2non/gock
   version: ~1.0.1
+- package: github.com/blang/semver
+  version: ~3.3.0

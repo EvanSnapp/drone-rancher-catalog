@@ -119,7 +119,7 @@ func buildImage(image string) error {
 		".",
 	}
 
-	return CreateCmd(args, true).Run()
+	return CreateCmd(args, false).Run()
 }
 
 func pushImage(image string) error {

@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	yaml "gopkg.in/yaml.v2"
+	"golang.org/x/oauth2"
 
 	"github.com/LeanKit-Labs/drone-rancher-catalog/docker"
 	"github.com/LeanKit-Labs/drone-rancher-catalog/github"
@@ -14,6 +14,8 @@ import (
 	"github.com/LeanKit-Labs/drone-rancher-catalog/types"
 	"github.com/drone/drone-go/drone"
 	dronePlugin "github.com/drone/drone-go/plugin"
+	"github.com/google/go-github/github"
+	yaml "gopkg.in/yaml.v2"
 )
 
 var version string
@@ -69,7 +71,19 @@ func exec(p types.Plugin) error {
 	//build tag
 	//doing this outside of subpackage to support potential use cases where the
 	//docker hub repo and docker hub repo are not the same
-	imageTags, err := tag.CreateDockerImageTags(p)
+
+	//git the smver from github
+	token := oauth2.Token{AccessToken: p.GithubAccessToken}
+	tokenSource := oauth2.StaticTokenSource(&token)
+	oauthClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
+	githubClient := github.NewClient(oauthClient)
+	release, _, err := githubClient.Repositories.GetLatestRelease(p.Repo.Owner, p.Repo.Name)
+	if err != nil {
+		return err
+	}
+
+	//now we can build the image tags
+	imageTags, err := tag.CreateDockerImageTags(p, (*release.TagName)[1:])
 
 	if err != nil {
 		return err
